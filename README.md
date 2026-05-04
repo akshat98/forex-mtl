@@ -1,5 +1,15 @@
 # forex-mtl
 
+## Links
+
+| Item | Link |
+| --- | --- |
+| Paidy assignment | [Forex.md](https://github.com/paidy/interview/blob/master/Forex.md) |
+| Investigation | [investigation/investigation.md](./investigation/investigation.md) |
+| API interface | [api-interface/api-io.md](./api-interface/api-io.md) |
+| Sequence diagram source | [sequence-diagram/sequence-diagram.puml](./sequence-diagram/sequence-diagram.puml) |
+| Sequence diagram image | [sequence-diagram/sequence-diagram.png](./sequence-diagram/sequence-diagram.png) |
+
 ## Assumptions / Tradeoff
 
 | Topic | Option / Assumption | Pros | Cons |
