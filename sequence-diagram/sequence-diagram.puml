@@ -1,0 +1,36 @@
+@startuml
+title Forex Proxy Sequence
+
+actor Client
+participant "Local Forex API" as API
+participant "Bucket Cache" as Cache
+participant "One-Frame API" as Upstream
+
+Client -> API: GET /rates?from=USD&to=JPY
+API -> API: validate
+
+alt invalid request
+  API --> Client: 400 error
+else valid request
+  API -> Cache: lookup bucket(USD)
+
+  alt fresh bucket exists
+    Cache --> API: USD bucket
+    API -> API: pick USD->JPY
+    API --> Client: 200 rate response
+  else bucket missing or stale
+    API -> Upstream: GET /rates?pair=USDAED&pair=USDAUD&...&pair=USDZMW\nHeader: token=10dc303535874aeccc86a8251e6992f5
+
+    alt upstream success
+      Upstream --> API: all USD->* rates
+      API -> Cache: replace bucket(USD)
+      API -> API: pick USD->JPY
+      API --> Client: 200 rate response
+    else upstream error
+      Upstream --> API: error response
+      API --> Client: 502/503 error
+    end
+  end
+end
+
+@enduml

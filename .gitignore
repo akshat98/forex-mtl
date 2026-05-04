@@ -1,0 +1,9 @@
+.DS_Store
+.bsp/
+.idea/
+.metals/
+.scala-build/
+target/
+project/target/
+project/project/
+out/
