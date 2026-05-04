@@ -20,8 +20,6 @@
 {
   "from": "USD",
   "to": "JPY",
-  "bid": 0.6118225421857174,
-  "ask": 0.8243869101616611,
   "price": 0.71810472617368925,
   "time_stamp": "2026-05-03T07:20:44.214Z"
 }
@@ -33,8 +31,6 @@
 | --- | --- | --- |
 | `from` | string | source currency |
 | `to` | string | target currency |
-| `bid` | number | upstream bid |
-| `ask` | number | upstream ask |
 | `price` | number | upstream price |
 | `time_stamp` | string | upstream timestamp |
 
@@ -71,15 +67,31 @@
 
 ## Errors
 
-| Case | Status | Body |
+### Error response shape
+
+```json
+{
+  "code": "FX_400_UNSUPPORTED_CURRENCY",
+  "message": "Unsupported currency"
+}
+```
+
+| Field | Type | Note |
 | --- | --- | --- |
-| unsupported `from` or `to` | `400` | `{"error":"Unsupported currency"}` |
-| `from == to` | `400` | `{"error":"from and to must be different"}` |
-| too many concurrent requests / overload | `429` | `{"error":"Too many requests"}` |
-| pair missing after refresh | `502` | `{"error":"Requested pair not found in upstream response"}` |
-| upstream auth fail | `502` | `{"error":"Upstream authentication failed"}` |
-| upstream timeout/down | `503` | `{"error":"Upstream service unavailable"}` |
-| upstream quota exhausted | `503` | `{"error":"Upstream quota exhausted"}` |
+| `code` | string | stable application error code |
+| `message` | string | human-readable message |
+
+### Error handling
+
+| Case | Status | Code | Body |
+| --- | --- | --- |
+| unsupported `from` or `to` | `400` | `FX_400_UNSUPPORTED_CURRENCY` | `{"code":"FX_400_UNSUPPORTED_CURRENCY","message":"Unsupported currency"}` |
+| `from == to` | `400` | `FX_400_SAME_CURRENCY` | `{"code":"FX_400_SAME_CURRENCY","message":"from and to must be different"}` |
+| too many concurrent requests / overload | `429` | `FX_429_TOO_MANY_REQUESTS` | `{"code":"FX_429_TOO_MANY_REQUESTS","message":"Too many requests"}` |
+| pair missing after refresh | `502` | `FX_502_PAIR_NOT_FOUND` | `{"code":"FX_502_PAIR_NOT_FOUND","message":"Requested pair not found in upstream response"}` |
+| upstream auth fail | `502` | `FX_502_UPSTREAM_AUTH` | `{"code":"FX_502_UPSTREAM_AUTH","message":"Upstream authentication failed"}` |
+| upstream timeout/down | `503` | `FX_503_UPSTREAM_UNAVAILABLE` | `{"code":"FX_503_UPSTREAM_UNAVAILABLE","message":"Upstream service unavailable"}` |
+| upstream quota exhausted | `503` | `FX_503_UPSTREAM_QUOTA` | `{"code":"FX_503_UPSTREAM_QUOTA","message":"Upstream quota exhausted"}` |
 
 ## Edge Cases
 
