@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.util.control.NonFatal
 import cats.effect.Sync
 import cats.syntax.either._
+import cats.syntax.flatMap._
 import forex.config.{ CacheConfig, OneFrameConfig }
 import forex.domain.{ Currency, Price, Rate, Timestamp }
 import forex.services.rates.Algebra
@@ -25,24 +26,31 @@ class OneFrameLive[F[_]: Sync](
   private val locks = new ConcurrentHashMap[Currency, Object]()
 
   override def get(pair: Rate.Pair): F[Error Either Rate] =
-    Sync[F].delay {
-      if (pair.from == pair.to) {
+    if (pair.from == pair.to) {
+      Sync[F].pure(
         Rate(
           pair = pair,
           price = Price(BigDecimal(1)),
           timestamp = Timestamp.now
         ).asRight[Error]
-      } else {
-        withCurrencyLock(pair.from) {
-          currentBucket(pair.from)
-            .filter(isFresh)
-            .flatMap(_.rates.get(pair))
-            .toRight(())
-            .fold(
-              _ => refreshBucket(pair.from).flatMap(_.get(pair).toRight(Error.RateNotFound(s"Rate not found for ${showPair(pair)}"))),
-              _.asRight[Error]
-            )
-        }
+      )
+    } else {
+      Sync[F].delay(currentBucket(pair.from).filter(isFresh).flatMap(_.rates.get(pair))).flatMap {
+        case Some(rate) =>
+          Sync[F].pure(rate.asRight[Error])
+        case None =>
+          Sync[F].delay {
+            withCurrencyLock(pair.from) {
+              currentBucket(pair.from)
+                .filter(isFresh)
+                .flatMap(_.rates.get(pair))
+                .toRight(())
+                .fold(
+                  _ => refreshBucket(pair.from).flatMap(_.get(pair).toRight(Error.RateNotFound(s"Rate not found for ${showPair(pair)}"))),
+                  _.asRight[Error]
+                )
+            }
+          }
       }
     }
 
@@ -56,12 +64,14 @@ class OneFrameLive[F[_]: Sync](
     Option(cache.get(currency))
 
   private def isFresh(bucket: CachedBucket): Boolean =
-    java.time.Duration.between(bucket.fetchedAt, OffsetDateTime.now).toMillis < cacheConfig.ttl.toMillis
+    java.time.Duration.between(bucket.oldestRateTimestamp, OffsetDateTime.now).toMillis < cacheConfig.ttl.toMillis
 
   private def refreshBucket(from: Currency): Error Either Map[Rate.Pair, Rate] =
     fetchRatesFor(from).map { rates =>
       val mapped = rates.map(rate => rate.pair -> rate).toMap
-      cache.put(from, CachedBucket(mapped, OffsetDateTime.now))
+      oldestTimestamp(rates).foreach { oldestRateTimestamp =>
+        cache.put(from, CachedBucket(mapped, oldestRateTimestamp))
+      }
       mapped
     }
 
@@ -83,11 +93,12 @@ class OneFrameLive[F[_]: Sync](
         else connection.getInputStream
 
       try {
+        val responseCode = connection.getResponseCode
         val body =
           if (stream == null) ""
           else scala.io.Source.fromInputStream(stream).mkString
 
-        parseBody(body)
+        parseBody(responseCode, body)
       } finally {
         if (stream != null) {
           stream.close()
@@ -96,19 +107,23 @@ class OneFrameLive[F[_]: Sync](
       }
     } catch {
       case NonFatal(error) =>
-        Error.OneFrameLookupFailed(error.getMessage).asLeft[List[Rate]]
+        Error.UpstreamUnavailable(error.getMessage).asLeft[List[Rate]]
     }
   }
 
-  private def parseBody(body: String): Error Either List[Rate] =
-    decode[List[UpstreamRate]](body) match {
-      case Right(rates) =>
-        rates.flatMap(toDomainRate).asRight[Error]
-      case Left(_) =>
-        decode[UpstreamError](body) match {
-          case Right(error) => Error.OneFrameLookupFailed(error.error).asLeft[List[Rate]]
-          case Left(error)  => Error.OneFrameLookupFailed(error.getMessage).asLeft[List[Rate]]
-        }
+  private def parseBody(responseCode: Int, body: String): Error Either List[Rate] =
+    if (responseCode >= 400) {
+      decode[UpstreamError](body) match {
+        case Right(error) => classifyUpstreamError(responseCode, error.error).asLeft[List[Rate]]
+        case Left(_)      => classifyUpstreamError(responseCode, s"Upstream returned HTTP $responseCode").asLeft[List[Rate]]
+      }
+    } else {
+      decode[List[UpstreamRate]](body) match {
+        case Right(rates) =>
+          rates.flatMap(toDomainRate).asRight[Error]
+        case Left(error) =>
+          Error.UpstreamUnavailable(error.getMessage).asLeft[List[Rate]]
+      }
     }
 
   private def toDomainRate(upstreamRate: UpstreamRate): Option[Rate] =
@@ -129,12 +144,28 @@ class OneFrameLive[F[_]: Sync](
 
   private def urlEncode(value: String): String =
     URLEncoder.encode(value, UTF_8.toString)
+
+  private def oldestTimestamp(rates: List[Rate]): Option[OffsetDateTime] =
+    rates.map(_.timestamp.value).sorted.headOption
+
+  private def classifyUpstreamError(responseCode: Int, message: String): Error =
+    responseCode match {
+      case 401 | 403 => Error.UpstreamAuthenticationFailed(message)
+      case 429       => Error.UpstreamQuotaReached(message)
+      case status if status >= 500 => Error.UpstreamUnavailable(message)
+      case _ =>
+        message match {
+          case "Forbidden"     => Error.UpstreamAuthenticationFailed(message)
+          case "Quota reached" => Error.UpstreamQuotaReached(message)
+          case _               => Error.UpstreamUnavailable(message)
+        }
+    }
 }
 
 object OneFrameLive {
   private final case class CachedBucket(
       rates: Map[Rate.Pair, Rate],
-      fetchedAt: OffsetDateTime
+      oldestRateTimestamp: OffsetDateTime
   )
 
   private final case class UpstreamRate(

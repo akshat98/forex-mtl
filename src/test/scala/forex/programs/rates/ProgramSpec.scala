@@ -43,15 +43,15 @@ class ProgramSpec extends AnyFlatSpec with Matchers {
     program.get(Protocol.GetRatesRequest(Currency.USD, Currency.USD)) shouldBe Right(expectedRate)
   }
 
-  it should "map upstream lookup failures from the service" in {
+  it should "map pair-not-found failures from the service" in {
     val service = new rates.Algebra[Id] {
       override def get(pair: Rate.Pair): rates.errors.Error Either Rate =
-        Left(rates.errors.Error.OneFrameLookupFailed("upstream down"))
+        Left(rates.errors.Error.RateNotFound("missing pair"))
     }
 
     val program = Program[Id](service)
 
     program.get(Protocol.GetRatesRequest(Currency.USD, Currency.JPY)) shouldBe
-      Left(Error.RateLookupFailed("upstream down"))
+      Left(Error.PairNotFound("missing pair"))
   }
 }
