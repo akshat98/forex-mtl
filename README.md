@@ -21,7 +21,7 @@ Assignment:
 | --- | --- |
 | Java 17 | run app, run tests |
 | sbt | build, test |
-| Docker | run upstream One-Frame locally |
+| Docker | run upstream One-Frame locally, run proxy in container |
 | curl | quick verification |
 
 ## Assumptions
@@ -49,6 +49,18 @@ docker pull paidyinc/one-frame
 docker run -p 8080:8080 paidyinc/one-frame
 ```
 
+## Run proxy on Docker
+
+```bash
+docker compose up --build
+```
+
+Proxy:
+- `http://localhost:8081/rates?from=USD&to=JPY`
+
+Upstream:
+- `http://localhost:8080`
+
 ## Run this app
 
 In another terminal:
@@ -66,6 +78,12 @@ sbt run
 
 ```bash
 curl "http://localhost:8080/rates?from=USD&to=JPY"
+```
+
+Docker:
+
+```bash
+curl "http://localhost:8081/rates?from=USD&to=JPY"
 ```
 
 Expected:
