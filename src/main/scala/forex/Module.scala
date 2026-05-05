@@ -5,6 +5,8 @@ import cats.effect.{ Concurrent, Sync, Timer }
 import cats.syntax.apply._
 import cats.syntax.flatMap._
 import forex.config.ApplicationConfig
+import forex.http.ErrorCode
+import forex.http.rates.Protocol.ErrorApiResponse
 import forex.http.rates.RatesHttpRoutes
 import forex.services._
 import forex.programs._
@@ -39,7 +41,8 @@ class Module[F[_]: Concurrent: Timer](config: ApplicationConfig) extends Http4sD
     HttpApp[F] { request =>
       Sync[F].delay(activeRequests.incrementAndGet()).flatMap { current =>
         if (current > config.security.maxConcurrentRequests) {
-          F.delay(activeRequests.decrementAndGet()) *> TooManyRequests("Too many requests")
+          F.delay(activeRequests.decrementAndGet()) *>
+            TooManyRequests(ErrorApiResponse(ErrorCode.TooManyRequests, "Too many requests"))
         } else {
           Concurrent[F].attempt(timeoutApp.run(request)).flatMap { result =>
             F.delay(activeRequests.decrementAndGet()) *>

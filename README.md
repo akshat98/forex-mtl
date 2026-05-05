@@ -9,10 +9,10 @@ Assignment:
 
 | Item | Link |
 | --- | --- |
-| Approach / API | [api-interface/api-io.md](./api-interface/api-io.md) |
-| Investigation | [investigation/investigation.md](./investigation/investigation.md) |
-| Sequence diagram | [sequence-diagram/sequence-diagram.png](./sequence-diagram/sequence-diagram.png) |
-| Sequence source | [sequence-diagram/sequence-diagram.puml](./sequence-diagram/sequence-diagram.puml) |
+| API / approach | [documentation/api-interface/api-io.md](./documentation/api-interface/api-io.md) |
+| Investigation | [documentation/investigation/investigation.md](./documentation/investigation/investigation.md) |
+| Sequence diagram | [documentation/sequence-diagram/sequence-diagram.png](./documentation/sequence-diagram/sequence-diagram.png) |
+| Sequence source | [documentation/sequence-diagram/sequence-diagram.puml](./documentation/sequence-diagram/sequence-diagram.puml) |
 | One-Frame upstream | [paidyinc/one-frame](https://hub.docker.com/r/paidyinc/one-frame) |
 
 ## Prerequisites
@@ -23,6 +23,7 @@ Assignment:
 | sbt | build, test |
 | Docker | run upstream One-Frame locally, run proxy in container |
 | curl | quick verification |
+| `.env` | local Docker token wiring |
 
 ## Assumptions
 
@@ -35,6 +36,12 @@ Assignment:
 | supported currencies in code | current scaffold set, not full upstream `162+` |
 | same-currency proxy rule | if `from == to`, return price `1` locally without calling upstream |
 
+## Setup
+
+```bash
+cp .env.example .env
+```
+
 ## Run tests
 
 ```bash
@@ -43,33 +50,26 @@ export PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH
 sbt test
 ```
 
-## Run upstream on Docker
-
-```bash
-docker pull paidyinc/one-frame
-docker run -p 8080:8080 paidyinc/one-frame
-```
-
-## Run proxy on Docker
+## Run on Docker
 
 ```bash
 docker compose up --build
 ```
 
-Proxy:
-- `http://localhost:8081/rates?from=USD&to=JPY`
+Verify:
 
-Upstream:
-- `http://localhost:8080`
+```bash
+curl "http://localhost:8081/rates?from=USD&to=JPY"
+```
 
 ## Run this app
 
-In another terminal:
-
 ```bash
+docker run -p 8081:8080 paidyinc/one-frame
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH
 export ONE_FRAME_TOKEN_LOCAL=10dc303535874aeccc86a8251e6992f5
+export ONE_FRAME_BASE_URI=http://localhost:8081
 sbt run
 ```
 
@@ -79,12 +79,6 @@ sbt run
 
 ```bash
 curl "http://localhost:8080/rates?from=USD&to=JPY"
-```
-
-Docker:
-
-```bash
-curl "http://localhost:8081/rates?from=USD&to=JPY"
 ```
 
 Expected:
@@ -98,8 +92,8 @@ curl "http://localhost:8080/rates?from=AAA&to=JPY"
 ```
 
 Expected:
-- `200 OK`
-- price `1`
+- `400 Bad Request`
+- JSON error with `FX_400_UNSUPPORTED_CURRENCY`
 
 ### 3. Same currency
 
@@ -108,7 +102,8 @@ curl "http://localhost:8080/rates?from=USD&to=USD"
 ```
 
 Expected:
-- non-`200`
+- `200 OK`
+- price `1`
 
 ## Disclaimer
 

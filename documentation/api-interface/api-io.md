@@ -49,7 +49,7 @@
 | --- | --- |
 | Cache key | `from` |
 | Cache value | all `from -> *` pairs |
-| TTL | 5 minutes |
+| Freshness check | requested rate timestamp must be `< 5 minutes` old |
 | Miss action | fetch full `from -> *` bucket |
 | Stale action | refetch full `from -> *` bucket |
 
@@ -91,7 +91,8 @@
 
 | Case | Status | Code | Body |
 | --- | --- | --- |
-| unsupported `from` or `to` | `400` | `FX_400_UNSUPPORTED_CURRENCY` | `{"code":"FX_400_UNSUPPORTED_CURRENCY","message":"Unsupported currency"}` |
+| missing `from` or `to` | `400` | `FX_400_MISSING_QUERY_PARAM` | `{"code":"FX_400_MISSING_QUERY_PARAM","message":"Missing query parameter: from|to"}` |
+| unsupported `from` or `to` | `400` | `FX_400_UNSUPPORTED_CURRENCY` | `{"code":"FX_400_UNSUPPORTED_CURRENCY","message":"Unsupported currency: AAA"}` |
 | too many concurrent requests / overload | `429` | `FX_429_TOO_MANY_REQUESTS` | `{"code":"FX_429_TOO_MANY_REQUESTS","message":"Too many requests"}` |
 | pair missing after refresh | `502` | `FX_502_PAIR_NOT_FOUND` | `{"code":"FX_502_PAIR_NOT_FOUND","message":"Requested pair not found in upstream response"}` |
 | upstream auth fail | `502` | `FX_502_UPSTREAM_AUTH` | `{"code":"FX_502_UPSTREAM_AUTH","message":"Upstream authentication failed"}` |
