@@ -27,7 +27,11 @@ class OneFrameLive[F[_]: Sync](
   override def get(pair: Rate.Pair): F[Error Either Rate] =
     Sync[F].delay {
       if (pair.from == pair.to) {
-        Error.InvalidCurrencyPair("from and to must be different").asLeft[Rate]
+        Rate(
+          pair = pair,
+          price = Price(BigDecimal(1)),
+          timestamp = Timestamp.now
+        ).asRight[Error]
       } else {
         withCurrencyLock(pair.from) {
           currentBucket(pair.from)
