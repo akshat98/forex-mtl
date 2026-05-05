@@ -1,0 +1,17 @@
+services:
+  one-frame:
+    image: paidyinc/one-frame:latest
+    ports:
+      - "8080:8080"
+
+  forex-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - one-frame
+    environment:
+      ONE_FRAME_BASE_URI: http://one-frame:8080
+      ONE_FRAME_TOKEN_LOCAL: ${ONE_FRAME_TOKEN_LOCAL}
+    ports:
+      - "8081:8080"

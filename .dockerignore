@@ -1,0 +1,12 @@
+.git
+.gitignore
+.scalafmt.conf
+.env
+.vscode
+target
+project/target
+project/project
+README.md
+investigation
+api-interface
+sequence-diagram
