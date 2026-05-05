@@ -53,12 +53,18 @@
 | Miss action | fetch full `from -> *` bucket |
 | Stale action | refetch full `from -> *` bucket |
 
+## Assumptions
+
+| Item | Value |
+| --- | --- |
+| same-currency proxy rule | if `from == to`, return price `1` locally without calling upstream |
+
 ## Request Steps
 
 | Step | Action |
 | --- | --- |
 | 1 | validate `from` and `to` |
-| 2 | reject if `from == to` |
+| 2 | if `from == to`, return price `1` |
 | 3 | read cache bucket by `from` |
 | 4 | if fresh, return `from -> to` |
 | 5 | if miss/stale, call upstream for `from -> *` |
@@ -86,7 +92,6 @@
 | Case | Status | Code | Body |
 | --- | --- | --- |
 | unsupported `from` or `to` | `400` | `FX_400_UNSUPPORTED_CURRENCY` | `{"code":"FX_400_UNSUPPORTED_CURRENCY","message":"Unsupported currency"}` |
-| `from == to` | `400` | `FX_400_SAME_CURRENCY` | `{"code":"FX_400_SAME_CURRENCY","message":"from and to must be different"}` |
 | too many concurrent requests / overload | `429` | `FX_429_TOO_MANY_REQUESTS` | `{"code":"FX_429_TOO_MANY_REQUESTS","message":"Too many requests"}` |
 | pair missing after refresh | `502` | `FX_502_PAIR_NOT_FOUND` | `{"code":"FX_502_PAIR_NOT_FOUND","message":"Requested pair not found in upstream response"}` |
 | upstream auth fail | `502` | `FX_502_UPSTREAM_AUTH` | `{"code":"FX_502_UPSTREAM_AUTH","message":"Upstream authentication failed"}` |
@@ -101,7 +106,7 @@
 | missing `to` | `400` |
 | unsupported `from` | `400` |
 | unsupported `to` | `400` |
-| same `from` and `to` | `400` |
+| same `from` and `to` | return `200` with price `1` |
 | stale cache bucket | refresh upstream |
 | empty upstream bucket | `502` |
 | partial upstream bucket | `502` if requested pair missing |

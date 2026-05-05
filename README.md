@@ -33,6 +33,7 @@ Assignment:
 | cache shape | `from currency -> *` bucket |
 | overload handling | `429 Too Many Requests` |
 | supported currencies in code | current scaffold set, not full upstream `162+` |
+| same-currency proxy rule | if `from == to`, return price `1` locally without calling upstream |
 
 ## Run tests
 
@@ -97,7 +98,8 @@ curl "http://localhost:8080/rates?from=AAA&to=JPY"
 ```
 
 Expected:
-- non-`200`
+- `200 OK`
+- price `1`
 
 ### 3. Same currency
 
