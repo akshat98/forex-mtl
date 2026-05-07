@@ -21,16 +21,9 @@ Assignment:
 | Step | Action |
 | --- | --- |
 | `1` | copy `.env.example` to `.env` |
-| `2` | set `ONE_FRAME_TOKEN_LOCAL` in `.env` |
+| `2` | use the values in `.env` |
 | `3` | run `docker compose up --build` |
 | `4` | call `http://localhost:8081/rates?from=USD&to=JPY` |
-
-Example `.env`:
-
-```env
-ONE_FRAME_TOKEN_LOCAL=10dc303535874aeccc86a8251e6992f5
-REDIS_PASSWORD=redis-local-token
-```
 
 ## Assumptions
 
