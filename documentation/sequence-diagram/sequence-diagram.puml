@@ -3,7 +3,7 @@ title Forex Proxy Sequence
 
 actor Client
 participant "Local Forex API" as API
-participant "Bucket Cache" as Cache
+participant "Redis Cache" as Cache
 participant "One-Frame API" as Upstream
 
 Client -> API: GET /rates?from=USD&to=JPY
@@ -11,19 +11,21 @@ API -> API: validate
 
 alt invalid request
   API --> Client: 400 error
+else same currency
+  API --> Client: 200 price=1
 else valid request
-  API -> Cache: lookup bucket(USD)
+  API -> Cache: GET redis key for USD
 
-  alt fresh bucket exists
-    Cache --> API: USD bucket
+  alt fresh cache entry exists
+    Cache --> API: cached USD->* rates
     API -> API: pick USD->JPY
     API --> Client: 200 rate response
-  else bucket missing or stale
+  else cache missing or stale
     API -> Upstream: GET /rates?pair=USDAED&pair=USDAUD&...&pair=USDZMW\nHeader: token=10dc303535874aeccc86a8251e6992f5
 
     alt upstream success
       Upstream --> API: all USD->* rates
-      API -> Cache: replace bucket(USD)
+      API -> Cache: SET redis key for USD
       API -> API: pick USD->JPY
       API --> Client: 200 rate response
     else upstream error

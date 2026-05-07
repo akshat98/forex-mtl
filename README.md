@@ -5,105 +5,87 @@ Local Forex proxy for the Paidy take-home assignment.
 Assignment:
 [Paidy Forex.md](https://github.com/paidy/interview/blob/master/Forex.md)
 
-## Links
-
-| Item | Link |
-| --- | --- |
-| API / approach | [documentation/api-interface/api-io.md](./documentation/api-interface/api-io.md) |
-| Investigation | [documentation/investigation/investigation.md](./documentation/investigation/investigation.md) |
-| Sequence diagram | [documentation/sequence-diagram/sequence-diagram.png](./documentation/sequence-diagram/sequence-diagram.png) |
-| Sequence source | [documentation/sequence-diagram/sequence-diagram.puml](./documentation/sequence-diagram/sequence-diagram.puml) |
-| One-Frame upstream | [paidyinc/one-frame](https://hub.docker.com/r/paidyinc/one-frame) |
-
-## Prerequisites
-
-| Item | Needed for |
-| --- | --- |
-| Java 17 | run app, run tests |
-| sbt | build, test |
-| Docker | run upstream One-Frame locally, run proxy in container |
-| curl | quick verification |
-| `.env` | local Docker token wiring |
-
-## Assumptions
+## Overview
 
 | Item | Value |
 | --- | --- |
-| selected cache path | Path 2 |
-| cache refresh | when stale at `5 min` |
-| cache shape | `from currency -> *` bucket |
-| overload handling | `429 Too Many Requests` |
-| supported currencies in code | current scaffold set, not full upstream `162+` |
-| same-currency proxy rule | if `from == to`, return price `1` locally without calling upstream |
+| Local API | `GET /rates?from={CURRENCY}&to={CURRENCY}` |
+| Upstream API | One-Frame `GET /rates?pair=...` |
+| Cache | Redis |
+| Freshness | `5 minutes` |
+| Supported currencies | selected top `30` |
+| Same currency | return `1` locally without upstream call |
 
-## Setup
+## Quickstart
 
-```bash
-cp .env.example .env
+| Step | Action |
+| --- | --- |
+| `1` | copy `.env.example` to `.env` |
+| `2` | set `ONE_FRAME_TOKEN_LOCAL` in `.env` |
+| `3` | run `docker compose up --build` |
+| `4` | call `http://localhost:8081/rates?from=USD&to=JPY` |
+
+Example `.env`:
+
+```env
+ONE_FRAME_TOKEN_LOCAL=10dc303535874aeccc86a8251e6992f5
+REDIS_PASSWORD=redis-local-token
 ```
 
-## Run tests
+## Assumptions
 
-```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
-export PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH
-sbt test
-```
+| Item | Why |
+| --- | --- |
+| Redis cache | shared cache is closer to production than per-process memory and survives app restarts |
+| Supported currencies = `30` | chosen to keep the documented `10K/day` target realistic under upstream quota and request-size limits |
+| Cache refresh policy | on miss or stale data, fetch all supported `from -> *` rates once and reuse them for later requests with the same `from` |
+| Scope tradeoff | increasing supported currencies increases upstream request size and can compromise the `10K/day` target |
 
-## Run on Docker
+Proof and sizing:
+- [Investigation - Upstream Findings](./documentation/investigation/investigation.md#upstream-findings)
+- [Investigation - Proof Of Capacity](./documentation/investigation/investigation.md#proof-of-capacity)
+- [Investigation - Maximum Supported Currencies For `10K/day`](./documentation/investigation/investigation.md#maximum-supported-currencies-for-10kday)
 
-```bash
-docker compose up --build
-```
+## Design Links
 
-Verify:
+| Item | Link |
+| --- | --- |
+| API and I/O | [documentation/api-interface/api-io.md](./documentation/api-interface/api-io.md) |
+| Investigation | [documentation/investigation/investigation.md](./documentation/investigation/investigation.md) |
+| Sequence diagram | [documentation/sequence-diagram/sequence-diagram.png](./documentation/sequence-diagram/sequence-diagram.png) |
+| Sequence source | [documentation/sequence-diagram/sequence-diagram.puml](./documentation/sequence-diagram/sequence-diagram.puml) |
+
+## API Example
 
 ```bash
 curl "http://localhost:8081/rates?from=USD&to=JPY"
 ```
 
-## Run this app
+Success:
 
-```bash
-docker run -p 8081:8080 paidyinc/one-frame
-export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
-export PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH
-export ONE_FRAME_TOKEN_LOCAL=10dc303535874aeccc86a8251e6992f5
-export ONE_FRAME_BASE_URI=http://localhost:8081
-sbt run
+```json
+{
+  "from": "USD",
+  "to": "JPY",
+  "price": 0.71810472617368925,
+  "time_stamp": "2026-05-03T07:20:44.214Z"
+}
 ```
 
-## Verify core functionality
+## Edge Cases
 
-### 1. Happy path
-
-```bash
-curl "http://localhost:8080/rates?from=USD&to=JPY"
-```
-
-Expected:
-- `200 OK`
-- JSON rate response
-
-### 2. Invalid currency
-
-```bash
-curl "http://localhost:8080/rates?from=AAA&to=JPY"
-```
-
-Expected:
-- `400 Bad Request`
-- JSON error with `FX_400_UNSUPPORTED_CURRENCY`
-
-### 3. Same currency
-
-```bash
-curl "http://localhost:8080/rates?from=USD&to=USD"
-```
-
-Expected:
-- `200 OK`
-- price `1`
+| Case | Handling |
+| --- | --- |
+| same `from` and `to` | return `200` with price `1`, no upstream call |
+| unsupported `from` or `to` | `400` with `FX_400_UNSUPPORTED_CURRENCY` |
+| missing `from` or `to` | `400` with `FX_400_MISSING_QUERY_PARAM` |
+| repeated requests for same `from` within freshness window | serve from Redis, do not call upstream again |
+| concurrent requests for same stale `from` in one app instance | local lock prevents duplicate upstream refresh |
+| concurrent requests for same stale `from` across multiple app instances | not fully prevented yet; distributed lock is out of scope |
+| too many concurrent requests | `429` with `FX_429_TOO_MANY_REQUESTS` |
+| upstream auth failure | `502` with `FX_502_UPSTREAM_AUTH` |
+| upstream unavailable | `503` with `FX_503_UPSTREAM_UNAVAILABLE` |
+| requested pair missing after refresh | `502` with `FX_502_PAIR_NOT_FOUND` |
 
 ## Disclaimer
 

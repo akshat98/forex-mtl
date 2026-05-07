@@ -48,6 +48,7 @@
 | Item | Value |
 | --- | --- |
 | Cache key | `from` |
+| Cache storage | Redis |
 | Cache value | all `from -> *` pairs |
 | Freshness check | requested rate timestamp must be `< 5 minutes` old |
 | Miss action | fetch full `from -> *` bucket |
@@ -65,10 +66,10 @@
 | --- | --- |
 | 1 | validate `from` and `to` |
 | 2 | if `from == to`, return price `1` |
-| 3 | read cache bucket by `from` |
+| 3 | read Redis cache by `from` |
 | 4 | if fresh, return `from -> to` |
 | 5 | if miss/stale, call upstream for `from -> *` |
-| 6 | replace cache bucket |
+| 6 | replace Redis cache entry |
 | 7 | return `from -> to` |
 
 ## Errors
@@ -112,5 +113,6 @@
 | empty upstream bucket | `502` |
 | partial upstream bucket | `502` if requested pair missing |
 | refresh failure | `503` |
-| concurrent stale requests for same `from` | `429` or single-flight later |
+| concurrent stale requests for same `from` in one app instance | one upstream refresh because of local lock |
+| concurrent stale requests for same `from` across multiple app instances | distributed lock not implemented yet |
 | DDoS / overload | `429` |
