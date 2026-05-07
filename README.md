@@ -22,8 +22,14 @@ Assignment:
 | --- | --- |
 | `1` | copy `.env.example` to `.env` |
 | `2` | use the values in `.env` |
-| `3` | run `docker compose up --build` |
+| `3` | run `docker compose up --build` to start `one-frame`, `redis`, and `forex-proxy` |
 | `4` | call `http://localhost:8081/rates?from=USD&to=JPY` |
+
+Run tests:
+
+```bash
+sbt test
+```
 
 ## Assumptions
 
