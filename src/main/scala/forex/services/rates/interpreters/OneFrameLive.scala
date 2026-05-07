@@ -8,7 +8,7 @@ import scala.util.control.NonFatal
 import cats.effect.Sync
 import cats.syntax.either._
 import cats.syntax.flatMap._
-import forex.config.{ CacheConfig, OneFrameConfig }
+import forex.config.{ CacheConfig, OneFrameConfig, RedisConfig }
 import forex.domain.{ Currency, Price, Rate, Timestamp }
 import forex.services.rates.Algebra
 import forex.services.rates.errors._
@@ -17,13 +17,14 @@ import io.circe.parser.decode
 
 class OneFrameLive[F[_]: Sync](
     oneFrameConfig: OneFrameConfig,
-    cacheConfig: CacheConfig
+    cacheConfig: CacheConfig,
+    redisConfig: RedisConfig
 ) extends Algebra[F] {
 
   import OneFrameLive._
 
-  private val cache = new ConcurrentHashMap[Currency, CachedBucket]()
   private val locks = new ConcurrentHashMap[Currency, Object]()
+  private val cache = new RedisRateCache(redisConfig, cacheConfig.ttl)
 
   override def get(pair: Rate.Pair): F[Error Either Rate] =
     if (pair.from == pair.to) {
@@ -35,23 +36,36 @@ class OneFrameLive[F[_]: Sync](
         ).asRight[Error]
       )
     } else {
-      Sync[F].delay(currentBucket(pair.from).filter(isFresh).flatMap(_.rates.get(pair))).flatMap {
-        case Some(rate) =>
+      Sync[F].delay(readFreshRate(pair)).flatMap {
+        case Right(Some(rate)) =>
           Sync[F].pure(rate.asRight[Error])
-        case None =>
+        case Right(None) =>
           Sync[F].delay {
             withCurrencyLock(pair.from) {
-              currentBucket(pair.from)
-                .filter(isFresh)
-                .flatMap(_.rates.get(pair))
-                .toRight(())
-                .fold(
-                  _ => refreshBucket(pair.from).flatMap(_.get(pair).toRight(Error.RateNotFound(s"Rate not found for ${showPair(pair)}"))),
-                  _.asRight[Error]
-                )
+              readFreshRate(pair).flatMap {
+                case Some(rate) =>
+                  Right(rate)
+                case None =>
+                  refreshBucket(pair.from).flatMap(_.get(pair).toRight(Error.RateNotFound(s"Rate not found for ${showPair(pair)}")))
+              }
             }
           }
+        case Left(error) =>
+          Sync[F].pure(Left(error))
       }
+    }
+
+  private def readFreshRate(pair: Rate.Pair): Error Either Option[Rate] =
+    currentRates(pair.from).map { maybeBucket =>
+      maybeBucket
+        .filter(isFresh)
+        .flatMap(_.rates.get(pair))
+    }
+
+  private def currentRates(currency: Currency): Error Either Option[CachedBucket] =
+    cache.get(currency).flatMap {
+      case Some(cachedRates) => cachedRates.toBucket.map(Some(_))
+      case None              => Right(None)
     }
 
   private def withCurrencyLock[A](currency: Currency)(f: => Error Either A): Error Either A = {
@@ -60,19 +74,17 @@ class OneFrameLive[F[_]: Sync](
     lock.synchronized(f)
   }
 
-  private def currentBucket(currency: Currency): Option[CachedBucket] =
-    Option(cache.get(currency))
-
-  private def isFresh(bucket: CachedBucket): Boolean =
-    java.time.Duration.between(bucket.oldestRateTimestamp, OffsetDateTime.now).toMillis < cacheConfig.ttl.toMillis
+  private def isFresh(cachedRates: CachedBucket): Boolean =
+    java.time.Duration.between(cachedRates.oldestRateTimestamp, OffsetDateTime.now).toMillis < cacheConfig.ttl.toMillis
 
   private def refreshBucket(from: Currency): Error Either Map[Rate.Pair, Rate] =
-    fetchRatesFor(from).map { rates =>
+    fetchRatesFor(from).flatMap { rates =>
       val mapped = rates.map(rate => rate.pair -> rate).toMap
-      oldestTimestamp(rates).foreach { oldestRateTimestamp =>
-        cache.put(from, CachedBucket(mapped, oldestRateTimestamp))
-      }
-      mapped
+      oldestTimestamp(rates)
+        .toRight(Error.UpstreamUnavailable("No timestamps returned from upstream"))
+        .flatMap { oldestRateTimestamp =>
+          cache.put(from, mapped, oldestRateTimestamp).map(_ => mapped)
+        }
     }
 
   private def fetchRatesFor(from: Currency): Error Either List[Rate] = {
@@ -163,7 +175,7 @@ class OneFrameLive[F[_]: Sync](
 }
 
 object OneFrameLive {
-  private final case class CachedBucket(
+  final case class CachedBucket(
       rates: Map[Rate.Pair, Rate],
       oldestRateTimestamp: OffsetDateTime
   )

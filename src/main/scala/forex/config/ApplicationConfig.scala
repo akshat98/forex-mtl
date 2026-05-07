@@ -6,6 +6,7 @@ case class ApplicationConfig(
     http: HttpConfig,
     oneFrame: OneFrameConfig,
     cache: CacheConfig,
+    redis: RedisConfig,
     security: SecurityConfig
 )
 
@@ -23,6 +24,13 @@ case class OneFrameConfig(
 
 case class CacheConfig(
     ttl: FiniteDuration
+)
+
+case class RedisConfig(
+    host: String,
+    port: Int,
+    password: String,
+    timeout: FiniteDuration
 )
 
 case class SecurityConfig(

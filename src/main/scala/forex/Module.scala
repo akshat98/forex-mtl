@@ -21,7 +21,7 @@ class Module[F[_]: Concurrent: Timer](config: ApplicationConfig) extends Http4sD
 
   private val activeRequests = new AtomicInteger(0)
 
-  private val ratesService: RatesService[F] = RatesServices.live[F](config.oneFrame, config.cache)
+  private val ratesService: RatesService[F] = RatesServices.live[F](config.oneFrame, config.cache, config.redis)
 
   private val ratesProgram: RatesProgram[F] = RatesProgram[F](ratesService)
 

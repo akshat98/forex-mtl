@@ -42,6 +42,20 @@ with header:
   - `{"error":"Forbidden"}`
 - The service supports a large currency set, and batching is essential to use quota efficiently.
 
+### Request Size Finding
+
+| Probe | Result |
+| --- | --- |
+| `USD-*` + `JPY-*` + `EUR-*` combined | `483` pairs |
+| generated URL length | `5824` chars |
+| upstream response | `400 Bad Request` |
+
+Conclusion:
+
+- one `from -> *` bucket per upstream request is safe and simple
+- batching multiple large `from` buckets into one request is not safe in practice
+- request size is a real HTTP constraint, not only a theoretical concern
+
 ## Caching Strategy Assumptions
 
 ### Primary Assumption
@@ -86,9 +100,11 @@ Cons:
 
 ## Assumptions
 
-- The local service may use in-memory caching for the exercise.
-- The local service does not need distributed cache coordination for this assignment.
+- The implementation uses Redis as the shared cache store.
+- Distributed locking is still not implemented in this version; duplicate refreshes are prevented only within one app instance.
 - Supported currencies are constrained by the upstream service, not by external reference websites.
+- The implementation intentionally limits the supported currency set to a top-30 list to preserve the documented `10K/day` target.
+- Increasing the supported currency set increases refresh request size and can compromise the documented `10K/day` target.
 - Returning stale data older than 5 minutes is not considered a successful response under the assignment requirement.
 - When a `from` currency is requested, caching the full `from -> *` bucket is acceptable because upstream cost is per request, not per pair.
 - The first version should stay simple and should not optimize based on historical traffic patterns.
@@ -101,7 +117,7 @@ Cons:
 - Input validation
 - Upstream One-Frame integration using `GET /rates`
 - Batching multiple `pair` values in one upstream request
-- In-memory source-currency bucket cache with 5-minute freshness policy
+- Redis-backed source-currency cache with 5-minute freshness policy
 - Upstream quota-aware refresh behavior
 - Error handling for invalid input, forbidden upstream access, and upstream quota exhaustion
 - Documentation of assumptions and trade-offs
@@ -109,8 +125,7 @@ Cons:
 ## Out of Scope
 
 - Streaming API support
-- Persistent cache across process restarts
-- Distributed cache or multi-node cache invalidation
+- Distributed lock implementation for multi-node refresh deduplication
 - Historical rates storage
 - Analytics over access patterns for trend data using LRU
 - Popular all-time traffic ranking using LFU
@@ -158,6 +173,67 @@ To stay within budget:
 
 So each bucket refresh must serve at least `10` local requests on average before expiring or being refreshed again.
 
+### Maximum Supported Currencies For `10K/day`
+
+#### Inputs
+
+| Item | Value |
+| --- | --- |
+| local target | `10,000/day` |
+| upstream budget | `1,000/day` |
+| refresh interval | `5 minutes` |
+| refresh windows/day | `288` |
+| measured safe upstream batch | `322 pairs` |
+| measured failing upstream batch | `483 pairs` |
+
+#### Step 1: Max Upstream Requests Per Refresh Window
+
+| Formula | Result |
+| --- | --- |
+| `1000 / 288` | `3.47` |
+| safe whole requests per 5-minute window | `3` |
+
+So the design can spend at most `3` upstream refresh requests per `5 minute` window.
+
+#### Step 2: Pair Count Per Request
+
+Let `N` be the supported currency count.
+
+| Item | Formula |
+| --- | --- |
+| pairs for one `from` bucket | `N - 1` |
+| pairs for `k` source buckets in one request | `k * (N - 1)` |
+
+Request size constraint:
+
+| Constraint | Reason |
+| --- | --- |
+| `k * (N - 1) <= 322` | measured working upstream batch size |
+
+Coverage constraint:
+
+| Constraint | Reason |
+| --- | --- |
+| `N <= 3k` | all source currencies must fit in `3` requests |
+
+#### Step 3: Choose The Largest `N`
+
+| `N` | `N - 1` | `max k = floor(322 / (N - 1))` | `3k` | Works? |
+| --- | --- | --- | --- | --- |
+| `30` | `29` | `11` | `33` | yes |
+| `31` | `30` | `10` | `30` | no |
+
+#### Result
+
+| Item | Value |
+| --- | --- |
+| maximum supported currencies | `30` |
+| example grouping | `10 + 10 + 10` source currencies |
+| pairs per upstream request | `10 * 29 = 290` |
+| upstream requests/day | `3 * 288 = 864/day` |
+
+So `30` is the maximum supported currency set size that still fits the `10K/day` target under the current assumptions and measured upstream URL-size behavior.
+
 ### Honest Limit
 
 This strategy proves `10,000/day` only under these conditions:
@@ -176,6 +252,7 @@ This strategy proves `10,000/day` only under these conditions:
 | every request uses a different stale `from` bucket | upstream quota burns too fast |
 | many concurrent misses for same `from` without guard | duplicate refresh waste |
 | DDoS / burst flood | local service degradation unless throttled |
+| multiple large `from` buckets combined into one upstream request | request can fail with `400` due to URL size |
 
 ## Overload / DDoS Handling
 
