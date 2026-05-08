@@ -21,7 +21,7 @@ else valid request
     API -> API: pick USD->JPY
     API --> Client: 200 rate response
   else cache missing or stale
-    API -> Upstream: GET /rates?pair=USDAED&pair=USDAUD&...&pair=USDZMW\nHeader: token=10dc303535874aeccc86a8251e6992f5
+    API -> Upstream: GET /rates?pair=USDAED&pair=USDAUD&...&pair=USDZAR\nHeader: token=10dc303535874aeccc86a8251e6992f5
 
     alt upstream success
       Upstream --> API: all USD->* rates

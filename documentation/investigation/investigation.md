@@ -16,7 +16,7 @@ with header:
 
 - Expose a local API that returns an exchange rate for a requested currency pair.
 - Validate that `from` and `to` are supported currencies.
-- Reject invalid requests where `from == to`.
+- Return price `1` locally when `from == to`, without calling upstream.
 - Call the upstream One-Frame `GET /rates` API when fresh data is not available locally.
 - Cache successful upstream responses.
 - Return rates that are not older than 5 minutes.
@@ -36,25 +36,30 @@ with header:
 
 ## Upstream Findings
 
-- The One-Frame service charges quota per request, not per pair.
-- A single request can fetch multiple pairs.
-- Missing or wrong token returns:
-  - `{"error":"Forbidden"}`
-- The service supports a large currency set, and batching is essential to use quota efficiently.
+| Finding | Result |
+| --- | --- |
+| quota model | charged per request, not per pair |
+| batching | one request can fetch many `pair` values |
+| auth failure | missing or wrong token returns `{"error":"Forbidden"}` |
+| design impact | batching helps, but request URL size becomes the real limit |
 
 ### Request Size Finding
 
 | Probe | Result |
 | --- | --- |
+| `USD-*` + `JPY-*` combined | `322` pairs |
+| generated URL length | `3892` chars |
+| upstream response | `200 OK` |
 | `USD-*` + `JPY-*` + `EUR-*` combined | `483` pairs |
 | generated URL length | `5824` chars |
 | upstream response | `400 Bad Request` |
 
-Conclusion:
-
-- one `from -> *` bucket per upstream request is safe and simple
-- batching multiple large `from` buckets into one request is not safe in practice
-- request size is a real HTTP constraint, not only a theoretical concern
+| Conclusion | Why |
+| --- | --- |
+| `322 pairs` is the measured safe planning bound | it worked against the real upstream API |
+| `483 pairs` is beyond the safe bound | it failed against the real upstream API |
+| broader currency scope increases risk | larger supported sets create larger refresh URLs |
+| one requested source currency plus every other supported target currency per refresh is the safest default | simple request shape and predictable sizing |
 
 ## Caching Strategy Assumptions
 
@@ -67,7 +72,7 @@ Some currencies and currency pairs will be requested much more often than others
 ### Cache Design Assumptions
 
 - Freshness window is 5 minutes.
-- Cached entries older than 5 minutes are stale.
+- A cached Redis entry is stale when its oldest upstream rate timestamp is older than 5 minutes.
 - Upstream budget should be treated as a refresh budget.
 - Cache hit ratio must be high enough that most local requests do not require upstream access.
 - Batching stale or missing pairs into one upstream request is preferable to one-pair-per-request fetching.
@@ -83,7 +88,7 @@ Cache key:
 
 Behavior:
 
-- On a miss for `USD -> JPY`, fetch all valid `USD -> *` pairs from upstream in one request, then cache them.
+- On a miss for `USD -> JPY`, fetch `USD` with every other supported target currency in one upstream request, then cache those results.
 - Store the fetched bucket locally and serve later requests for the same `from` currency from cache until the bucket becomes stale.
 
 Pros:
@@ -106,7 +111,7 @@ Cons:
 - The implementation intentionally limits the supported currency set to a top-30 list to preserve the documented `10K/day` target.
 - Increasing the supported currency set increases refresh request size and can compromise the documented `10K/day` target.
 - Returning stale data older than 5 minutes is not considered a successful response under the assignment requirement.
-- When a `from` currency is requested, caching the full `from -> *` bucket is acceptable because upstream cost is per request, not per pair.
+- When a `from` currency is requested, caching that source currency with every other supported target currency is acceptable because upstream cost is per request, not per pair.
 - The first version should stay simple and should not optimize based on historical traffic patterns.
 - The 10,000/day goal is achievable under a normal traffic distribution where repeated requests reuse cached `from` buckets.
 - The service cannot guarantee 10,000/day under arbitrary adversarial traffic where every request forces a unique stale bucket refresh.
@@ -143,7 +148,7 @@ Cons:
 | upstream budget | `1,000 requests/day` |
 | freshness TTL | `5 minutes` |
 | cache key | `from` currency |
-| one upstream refresh | all `from -> *` pairs |
+| one upstream refresh | requested source currency with every other supported target currency |
 
 ### Required Cache Hit Ratio
 
@@ -232,7 +237,7 @@ Coverage constraint:
 | pairs per upstream request | `10 * 29 = 290` |
 | upstream requests/day | `3 * 288 = 864/day` |
 
-So `30` is the maximum supported currency set size that still fits the `10K/day` target under the current assumptions and measured upstream URL-size behavior.
+`30` is the maximum supported currency set size that still fits the `10K/day` target under the current assumptions and measured upstream URL-size behavior.
 
 ### Honest Limit
 
@@ -261,7 +266,7 @@ This strategy proves `10,000/day` only under these conditions:
 | Situation | Response |
 | --- | --- |
 | per-client or global concurrency above threshold | `429 Too Many Requests` |
-| same `from` bucket already refreshing | reject or wait; first version may return `429` |
+| same `from` bucket already refreshing | wait on the in-process lock in the current implementation |
 | upstream quota exhausted and no fresh cache | `503 Service Unavailable` |
 
 ### Goal
