@@ -16,12 +16,7 @@ Assignment:
 | Supported currencies | configured full set `162` |
 | Same currency | return `1` locally without upstream call |
 
-## Prerequisites
-
-macOS setup:
-[documentation/prerequisites-mac.md](./documentation/prerequisites-mac.md)
-
-## Quickstart
+## Run Locally
 
 `.env` is local-only and is not checked into Git.
 
@@ -29,10 +24,16 @@ macOS setup:
 cp .env.example .env
 ```
 
-Run the full stack with Docker:
+Start only the dependencies:
 
 ```bash
-docker compose up --build
+docker compose up -d one-frame redis
+```
+
+Run the local proxy on `8081`:
+
+```bash
+APP_HTTP_PORT=8081 sbt run
 ```
 
 Verify `one-frame`:
@@ -41,7 +42,7 @@ Verify `one-frame`:
 curl -H "token: 10dc303535874aeccc86a8251e6992f5" "http://localhost:8080/rates?pair=USDJPY"
 ```
 
-Verify `forex-proxy`:
+Verify the local proxy:
 
 ```bash
 curl "http://localhost:8081/rates?from=USD&to=JPY"
@@ -53,15 +54,24 @@ Run tests:
 sbt test
 ```
 
-Run only the local server on `8081`:
+## Run With Docker And Prerequisites
+
+macOS prerequisites:
+[documentation/prerequisites-mac.md](./documentation/prerequisites-mac.md)
+
+Create local config:
 
 ```bash
 cp .env.example .env
-docker compose up -d one-frame redis
-APP_HTTP_PORT=8081 sbt run
 ```
 
-Verify the local server:
+Run the full stack:
+
+```bash
+docker compose up --build
+```
+
+Verify `forex-proxy`:
 
 ```bash
 curl "http://localhost:8081/rates?from=USD&to=JPY"
