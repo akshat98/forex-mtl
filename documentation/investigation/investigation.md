@@ -111,100 +111,84 @@ Behavior:
 
 ## Proof Of Capacity
 
-### Definitions
+### Correct Framing
+
+| Item | Meaning |
+| --- | --- |
+| objective | choose the maximum supported currency count `N` that can always satisfy the `10K/day` requirement |
+| always satisfy | any requested pair inside the supported set should already be fresh in cache |
+| implication | the proof cannot depend on hot currencies, request reuse, or favorable traffic shape |
+
+### Guarantee Model
 
 | Item | Value |
 | --- | --- |
 | local target | `10,000 requests/day` |
 | upstream budget | `1,000 requests/day` |
 | freshness TTL | `5 minutes` |
-| cache key | `from` currency |
-| one upstream refresh | requested source currency with every other supported target currency |
-
-### Required Cache Hit Ratio
-
-| Formula | Result |
-| --- | --- |
-| `upstream_budget / local_target` | `1000 / 10000 = 0.1` |
-| max upstream calls per local request | `0.1` |
-| required cache-served share | `>= 90%` |
-
-
-### Maximum Supported Currencies For `10K/day`
-
-This section is a sizing reference for a capped-scope design. It is not the current implementation guarantee, because the current code supports the wider `162`-currency set.
-
-#### Inputs
-
-| Item | Value |
-| --- | --- |
-| local target | `10,000/day` |
-| upstream budget | `1,000/day` |
-| refresh interval | `5 minutes` |
 | refresh windows/day | `288` |
-| measured safe upstream batch | `322 pairs` |
-| measured failing upstream batch | `483 pairs` |
+| same-currency rule | same-currency requests return `1` locally and do not consume upstream budget |
+| upstream-required ordered pairs | `N * (N - 1)` |
 
-#### Step 1: Max Upstream Requests Per Refresh Window
+Notes:
+
+- `N * (N - 1)` already covers every non-same ordered pair, so there is no extra `+ requested pair` term.
+- If the goal is a hard guarantee, all supported ordered pairs must be refreshed within every 5-minute window.
+- A round-robin refresh across multiple windows does not work for a guarantee, because some pairs would become older than 5 minutes.
+
+### Upstream Request Budget Per Refresh Window
 
 | Formula | Result |
 | --- | --- |
 | `1000 / 288` | `3.47` |
-| safe whole requests per 5-minute window | `3` |
+| safe whole upstream requests per 5-minute window | `3` |
 
-So the design can spend at most `3` upstream refresh requests per `5 minute` window.
+So the guarantee model can spend at most `3` upstream requests in each `5 minute` window.
 
-#### Step 2: Pair Count Per Request
-
-Let `N` be the supported currency count.
-
-| Item | Formula |
-| --- | --- |
-| pairs for one `from` bucket | `N - 1` |
-| pairs for `k` source buckets in one request | `k * (N - 1)` |
-
-Request size constraint:
-
-| Constraint | Reason |
-| --- | --- |
-| `k * (N - 1) <= 322` | measured working upstream batch size |
-
-Coverage constraint:
-
-| Constraint | Reason |
-| --- | --- |
-| `N <= 3k` | all source currencies must fit in `3` requests |
-
-#### Step 3: Choose The Largest `N`
-
-| `N` | `N - 1` | `max k = floor(322 / (N - 1))` | `3k` | Works? |
-| --- | --- | --- | --- | --- |
-| `30` | `29` | `11` | `33` | yes |
-| `31` | `30` | `10` | `30` | no |
-
-#### Result
+### Safe Pair Capacity Per Refresh Window
 
 | Item | Value |
 | --- | --- |
-| maximum supported currencies | `30` |
-| example grouping | `10 + 10 + 10` source currencies |
-| pairs per upstream request | `10 * 29 = 290` |
-| upstream requests/day | `3 * 288 = 864/day` |
+| measured safe upstream batch | `322 pairs` |
+| measured failing upstream batch | `483 pairs` |
+| safe planning bound per request | `322 pairs` |
+| safe planning bound per 5-minute window | `3 * 322 = 966 pairs` |
 
-`30` is the maximum supported currency set size that still fits the `10K/day` target under the capped-scope assumptions and measured upstream URL-size behavior.
+So a hard guarantee must satisfy:
+
+| Constraint | Reason |
+| --- | --- |
+| `N * (N - 1) <= 966` | all supported non-same ordered pairs must fit inside the safe per-window pair budget |
+
+### Maximum Supported Currencies For `10K/day`
+
+| `N` | `N * (N - 1)` | Works? |
+| --- | --- | --- |
+| `31` | `31 * 30 = 930` | yes |
+| `32` | `32 * 31 = 992` | no |
+
+### Result
+
+| Item | Value |
+| --- | --- |
+| theoretical maximum `N` for a hard `10K/day` guarantee | `31` |
+| safer practical target | `30` |
+| why `30` is safer | leaves a small margin below the measured request-size edge |
+
+So, with the corrected guarantee framing, `31` is the theoretical maximum supported currency count and `30` is the safer practical target.
 
 ### Honest Limit
 
-With the current full `162`-currency implementation, `10,000/day` is only conditional. It is not guaranteed by the earlier capped-scope proof.
+The current implementation does not use this full-pair proactive refresh model. It uses on-demand refresh by requested source currency only.
 
-This strategy proves `10,000/day` only under these conditions:
+That means:
 
-| Condition | Why |
+| Implementation shape | Guarantee status |
 | --- | --- |
-| repeated requests share the same `from` currencies | bucket reuse |
-| cache hit ratio stays at or above `90%` | quota fit |
-| duplicate concurrent refreshes are blocked | no refresh storms |
-| abusive traffic is rate-limited | protects local capacity |
+| capped-scope proactive full-pair refresh | can support a hard `10K/day` proof |
+| current on-demand `from`-based refresh | `10,000/day` is conditional, not guaranteed |
+
+With the current full `162`-currency implementation, `10,000/day` depends on favorable request reuse and cannot be guaranteed under arbitrary traffic.
 
 ### Not Guaranteed Cases
 
