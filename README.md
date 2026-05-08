@@ -17,7 +17,7 @@ Assignment:
 | Same currency | return `1` locally without upstream call |
 
 ## Quickstart
-
+copy .env.example into .env file
 `.env` is local-only and is not checked into Git.
 
 ```bash
