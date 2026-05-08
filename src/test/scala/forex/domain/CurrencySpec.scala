@@ -6,19 +6,24 @@ import org.scalatest.matchers.should.Matchers
 class CurrencySpec extends AnyFlatSpec with Matchers {
 
   "Currency.parse" should "parse supported currencies case-insensitively" in {
-    Currency.parse("usd") shouldBe Some(Currency.USD)
-    Currency.parse("JPY") shouldBe Some(Currency.JPY)
-    Currency.parse("eUr") shouldBe Some(Currency.EUR)
-    Currency.parse("inr") shouldBe Some(Currency.INR)
+    List(
+      "usd" -> Currency.USD,
+      "JPY" -> Currency.JPY,
+      "eUr" -> Currency.EUR,
+      "inr" -> Currency.INR,
+      "php" -> Currency.PHP
+    ).foreach { case (code, expected) =>
+      Currency.parse(code) shouldBe Some(expected)
+    }
   }
 
   it should "return none for unsupported currencies" in {
-    Currency.parse("ABC") shouldBe None
-    Currency.parse("") shouldBe None
-    Currency.parse("PHP") shouldBe None
+    List("ABC", "", "ZZZ").foreach { code =>
+      Currency.parse(code) shouldBe None
+    }
   }
 
-  it should "support the selected top-30 currency scope" in {
-    Currency.values.size shouldBe 30
+  it should "support the configured full currency scope" in {
+    Currency.values.size shouldBe 162
   }
 }

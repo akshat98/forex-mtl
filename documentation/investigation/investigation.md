@@ -108,8 +108,8 @@ Cons:
 - The implementation uses Redis as the shared cache store.
 - Distributed locking is still not implemented in this version; duplicate refreshes are prevented only within one app instance.
 - Supported currencies are constrained by the upstream service, not by external reference websites.
-- The implementation intentionally limits the supported currency set to a top-30 list to preserve the documented `10K/day` target.
-- Increasing the supported currency set increases refresh request size and can compromise the documented `10K/day` target.
+- The implementation supports the wider configured `162`-currency set.
+- Increasing the supported currency set increases refresh request size and weakens the earlier capped-scope `10K/day` proof.
 - Returning stale data older than 5 minutes is not considered a successful response under the assignment requirement.
 - When a `from` currency is requested, caching that source currency with every other supported target currency is acceptable because upstream cost is per request, not per pair.
 - The first version should stay simple and should not optimize based on historical traffic patterns.
@@ -180,6 +180,8 @@ So each bucket refresh must serve at least `10` local requests on average before
 
 ### Maximum Supported Currencies For `10K/day`
 
+This section is a sizing reference for a capped-scope design. It is not the current implementation guarantee, because the current code supports the wider `162`-currency set.
+
 #### Inputs
 
 | Item | Value |
@@ -237,9 +239,11 @@ Coverage constraint:
 | pairs per upstream request | `10 * 29 = 290` |
 | upstream requests/day | `3 * 288 = 864/day` |
 
-`30` is the maximum supported currency set size that still fits the `10K/day` target under the current assumptions and measured upstream URL-size behavior.
+`30` is the maximum supported currency set size that still fits the `10K/day` target under the capped-scope assumptions and measured upstream URL-size behavior.
 
 ### Honest Limit
+
+With the current full `162`-currency implementation, `10,000/day` is only conditional. It is not guaranteed by the earlier capped-scope proof.
 
 This strategy proves `10,000/day` only under these conditions:
 
