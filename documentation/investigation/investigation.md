@@ -34,7 +34,7 @@ with header:
 - Keep latency low for hot or recently requested pairs.
 - Protect service from abusive concurrency spikes.
 
-## Upstream Findings
+## OneFrame API (Upstream) Findings
 
 | Finding | Result |
 | --- | --- |
@@ -67,20 +67,11 @@ with header:
 
 Traffic is not evenly distributed across all possible currency pairs.
 
-Some currencies and currency pairs will be requested much more often than others. Because of that, the cache strategy should optimize for hot access patterns instead of prewarming the entire theoretical pair universe.
+Some currencies and currency pairs will be requested much more often than others. Because of that, the cache strategy should optimize for hot access patterns instead of prewarming the entire theoretical pairs.
 
-### Cache Design Assumptions
+### Cache Design
 
-- Freshness window is 5 minutes.
-- A cached Redis entry is stale when its oldest upstream rate timestamp is older than 5 minutes.
-- Upstream budget should be treated as a refresh budget.
-- Cache hit ratio must be high enough that most local requests do not require upstream access.
-- Batching stale or missing pairs into one upstream request is preferable to one-pair-per-request fetching.
-- Concurrent refreshes for the same logical cache key should be deduplicated where practical.
-
-### Selected Cache Shape
-
-#### Source-Currency Bucket Cache
+A cached Redis entry is stale when its oldest upstream rate timestamp is older than 5 minutes.
 
 Cache key:
 
@@ -91,28 +82,12 @@ Behavior:
 - On a miss for `USD -> JPY`, fetch `USD` with every other supported target currency in one upstream request, then cache those results.
 - Store the fetched bucket locally and serve later requests for the same `from` currency from cache until the bucket becomes stale.
 
-Pros:
-
-- Very simple model
-- Efficient use of upstream quota
-- Improves hit rate for repeated access from the same source currency
-- Matches the upstream billing model, since quota is charged per request rather than per pair
-
-Cons:
-
-- Fetches more data than the immediate request needs
-- Some cached pairs may never be read before expiry
-
 ## Assumptions
 
 - The implementation uses Redis as the shared cache store.
 - Distributed locking is still not implemented in this version; duplicate refreshes are prevented only within one app instance.
-- Supported currencies are constrained by the upstream service, not by external reference websites.
 - The implementation supports the wider configured `162`-currency set.
-- Increasing the supported currency set increases refresh request size and weakens the earlier capped-scope `10K/day` proof.
-- Returning stale data older than 5 minutes is not considered a successful response under the assignment requirement.
 - When a `from` currency is requested, caching that source currency with every other supported target currency is acceptable because upstream cost is per request, not per pair.
-- The first version should stay simple and should not optimize based on historical traffic patterns.
 - The 10,000/day goal is achievable under a normal traffic distribution where repeated requests reuse cached `from` buckets.
 - The service cannot guarantee 10,000/day under arbitrary adversarial traffic where every request forces a unique stale bucket refresh.
 
@@ -129,14 +104,10 @@ Cons:
 
 ## Out of Scope
 
-- Streaming API support
 - Distributed lock implementation for multi-node refresh deduplication
 - Historical rates storage
 - Analytics over access patterns for trend data using LRU
 - Popular all-time traffic ranking using LFU
-- Auto-scaling or multi-region deployment
-- Dynamic pricing, arbitrage logic, or trading functionality
-- Full production observability platform implementation
 
 ## Proof Of Capacity
 
@@ -158,25 +129,6 @@ Cons:
 | max upstream calls per local request | `0.1` |
 | required cache-served share | `>= 90%` |
 
-### Why Source-Bucket Cache Helps
-
-| Event | Upstream cost | Local reuse |
-| --- | --- | --- |
-| first request for `USD -> JPY` | `1` | warms all `USD -> *` |
-| later request for `USD -> EUR` | `0` | same cached `USD` bucket |
-| later request for `USD -> GBP` | `0` | same cached `USD` bucket |
-
-### Minimum Reuse Needed
-
-To stay within budget:
-
-| Metric | Value |
-| --- | --- |
-| local requests/day | `10,000` |
-| upstream refreshes/day | `<= 1,000` |
-| average local requests served per refresh | `>= 10` |
-
-So each bucket refresh must serve at least `10` local requests on average before expiring or being refreshed again.
 
 ### Maximum Supported Currencies For `10K/day`
 
