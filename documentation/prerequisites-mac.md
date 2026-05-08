@@ -24,6 +24,14 @@ Install Java 17:
 brew install openjdk@17
 ```
 
+Use Java 17 in the current shell:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+```
+
 Install sbt:
 
 ```bash

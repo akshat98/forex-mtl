@@ -51,9 +51,19 @@ Verify `forex-proxy`:
 curl "http://localhost:8081/rates?from=USD&to=JPY"
 ```
 
+You can also open `http://localhost:8081/rates?from=USD&to=JPY` in your browser for a quick check.
+
 Run tests:
 
 ```bash
+sbt test
+```
+
+If `sbt test` fails with a Java version error, use Java 17 in the current shell:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
 sbt test
 ```
 
@@ -64,6 +74,15 @@ cp .env.example .env
 docker compose up -d one-frame redis
 APP_HTTP_PORT=8081 sbt run
 ```
+
+If `sbt run` fails with a Java version error, use Java 17 in the current shell:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+APP_HTTP_PORT=8081 sbt run
+```
+
 
 ## Assumptions
 
