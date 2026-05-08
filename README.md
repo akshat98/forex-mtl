@@ -18,12 +18,29 @@ Assignment:
 
 ## Quickstart
 
-| Step | Action |
-| --- | --- |
-| `1` | copy `.env.example` to `.env` |
-| `2` | use the values in `.env` |
-| `3` | run `docker compose up --build` to start `one-frame`, `redis`, and `forex-proxy` |
-| `4` | call `http://localhost:8081/rates?from=USD&to=JPY` |
+`.env` is local-only and is not checked into Git.
+
+```bash
+cp .env.example .env
+```
+
+Start `one-frame`, `redis`, and `forex-proxy`:
+
+```bash
+docker compose up --build
+```
+
+Verify `one-frame`:
+
+```bash
+curl -H "token: 10dc303535874aeccc86a8251e6992f5" "http://localhost:8080/rates?pair=USDJPY"
+```
+
+Verify `forex-proxy`:
+
+```bash
+curl "http://localhost:8081/rates?from=USD&to=JPY"
+```
 
 Run tests:
 
@@ -33,17 +50,13 @@ sbt test
 
 ## Assumptions
 
-| Item | Why |
-| --- | --- |
-| Redis cache | shared cache is closer to production than per-process memory and survives app restarts |
-| Supported currencies = `30` | chosen to keep the documented `10K/day` target realistic under upstream quota and request-size limits |
-| Cache refresh policy | on miss or stale data, fetch all supported `from -> *` rates once and reuse them for later requests with the same `from` |
-| Scope tradeoff | increasing supported currencies increases upstream request size and can compromise the `10K/day` target |
-
-Proof and sizing:
-- [Investigation - Upstream Findings](./documentation/investigation/investigation.md#upstream-findings)
-- [Investigation - Proof Of Capacity](./documentation/investigation/investigation.md#proof-of-capacity)
-- [Investigation - Maximum Supported Currencies For `10K/day`](./documentation/investigation/investigation.md#maximum-supported-currencies-for-10kday)
+| Item | Why | Proof |
+| --- | --- | --- |
+| Redis cache | shared cache is closer to production than per-process memory and survives app restarts | [API and I/O](./documentation/api-interface/api-io.md#cache) |
+| Supported currencies = `30` | code can be expanded to more currencies, but `30` was chosen to keep the documented `10K/day` target realistic under upstream quota and measured request-size limits | [Investigation - Maximum Supported Currencies For `10K/day`](./documentation/investigation/investigation.md#maximum-supported-currencies-for-10kday) |
+| Cache refresh policy | on miss or stale data, fetch the requested source currency with every other supported target currency once and reuse those cached rates for later requests with the same source currency | [API and I/O](./documentation/api-interface/api-io.md#request-steps) |
+| Scope tradeoff | increasing supported currencies increases upstream URL size; measured safe upstream batch was `322` pairs and measured failing batch was `483` pairs, so broader scope can compromise the `10K/day` target | [Investigation - Request Size Finding](./documentation/investigation/investigation.md#request-size-finding) |
+| `10K/day` target | cache refresh strategy is sized to fit under the upstream `1000/day` limit | [Investigation - Proof Of Capacity](./documentation/investigation/investigation.md#proof-of-capacity) |
 
 ## Design Links
 

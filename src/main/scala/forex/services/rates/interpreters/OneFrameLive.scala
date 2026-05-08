@@ -56,13 +56,13 @@ class OneFrameLive[F[_]: Sync](
     }
 
   private def readFreshRate(pair: Rate.Pair): Error Either Option[Rate] =
-    currentRates(pair.from).map { maybeBucket =>
+    readCachedRates(pair.from).map { maybeBucket =>
       maybeBucket
         .filter(isFresh)
         .flatMap(_.rates.get(pair))
     }
 
-  private def currentRates(currency: Currency): Error Either Option[CachedBucket] =
+  protected def readCachedRates(currency: Currency): Error Either Option[CachedBucket] =
     cache.get(currency).flatMap {
       case Some(cachedRates) => cachedRates.toBucket.map(Some(_))
       case None              => Right(None)
@@ -74,8 +74,8 @@ class OneFrameLive[F[_]: Sync](
     lock.synchronized(f)
   }
 
-  private def isFresh(cachedRates: CachedBucket): Boolean =
-    java.time.Duration.between(cachedRates.oldestRateTimestamp, OffsetDateTime.now).toMillis < cacheConfig.ttl.toMillis
+  protected def isFresh(cachedRates: CachedBucket): Boolean =
+    java.time.Duration.between(cachedRates.oldestRateTimestamp, now()).toMillis < cacheConfig.ttl.toMillis
 
   private def refreshBucket(from: Currency): Error Either Map[Rate.Pair, Rate] =
     fetchRatesFor(from).flatMap { rates =>
@@ -83,11 +83,18 @@ class OneFrameLive[F[_]: Sync](
       oldestTimestamp(rates)
         .toRight(Error.UpstreamUnavailable("No timestamps returned from upstream"))
         .flatMap { oldestRateTimestamp =>
-          cache.put(from, mapped, oldestRateTimestamp).map(_ => mapped)
+          writeCachedRates(from, mapped, oldestRateTimestamp).map(_ => mapped)
         }
     }
 
-  private def fetchRatesFor(from: Currency): Error Either List[Rate] = {
+  protected def writeCachedRates(
+      from: Currency,
+      rates: Map[Rate.Pair, Rate],
+      oldestRateTimestamp: OffsetDateTime
+  ): Error Either Unit =
+    cache.put(from, rates, oldestRateTimestamp)
+
+  protected def fetchRatesFor(from: Currency): Error Either List[Rate] = {
     val pairs = Currency.values.filterNot(_ == from).map(to => Rate.Pair(from, to))
     val encodedPairs = pairs.map(showPair)
     val query = encodedPairs.map(pair => s"pair=${urlEncode(pair)}").mkString("&")
@@ -156,6 +163,9 @@ class OneFrameLive[F[_]: Sync](
 
   private def urlEncode(value: String): String =
     URLEncoder.encode(value, UTF_8.toString)
+
+  protected def now(): OffsetDateTime =
+    OffsetDateTime.now
 
   private def oldestTimestamp(rates: List[Rate]): Option[OffsetDateTime] =
     rates.map(_.timestamp.value).sorted.headOption

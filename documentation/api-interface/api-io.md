@@ -49,10 +49,10 @@
 | --- | --- |
 | Cache key | `from` |
 | Cache storage | Redis |
-| Cache value | all `from -> *` pairs |
-| Freshness check | requested rate timestamp must be `< 5 minutes` old |
-| Miss action | fetch full `from -> *` bucket |
-| Stale action | refetch full `from -> *` bucket |
+| Cache value | requested source currency with every other supported target currency |
+| Freshness check | oldest cached upstream timestamp in the Redis entry must be `< 5 minutes` old |
+| Miss action | fetch requested source currency with every other supported target currency |
+| Stale action | refetch requested source currency with every other supported target currency |
 
 ## Assumptions
 
@@ -68,7 +68,7 @@
 | 2 | if `from == to`, return price `1` |
 | 3 | read Redis cache by `from` |
 | 4 | if fresh, return `from -> to` |
-| 5 | if miss/stale, call upstream for `from -> *` |
+| 5 | if miss/stale, call upstream for the requested source currency with every other supported target currency |
 | 6 | replace Redis cache entry |
 | 7 | return `from -> to` |
 
@@ -108,7 +108,7 @@
 | missing `to` | `400` |
 | unsupported `from` | `400` |
 | unsupported `to` | `400` |
-| same `from` and `to` | return `200` with price `1` |
+| same `from` and `to` | return `200` with price `1`, no upstream call |
 | stale cache bucket | refresh upstream |
 | empty upstream bucket | `502` |
 | partial upstream bucket | `502` if requested pair missing |
