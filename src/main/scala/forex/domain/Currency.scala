@@ -2,156 +2,201 @@ package forex.domain
 
 import cats.Show
 
-sealed trait Currency
+sealed abstract class Currency(val code: String)
 
 object Currency {
-  case object AED extends Currency
-  case object AUD extends Currency
-  case object BRL extends Currency
-  case object CAD extends Currency
-  case object CHF extends Currency
-  case object CNY extends Currency
-  case object CZK extends Currency
-  case object DKK extends Currency
-  case object EUR extends Currency
-  case object GBP extends Currency
-  case object HKD extends Currency
-  case object HUF extends Currency
-  case object IDR extends Currency
-  case object ILS extends Currency
-  case object INR extends Currency
-  case object NZD extends Currency
-  case object JPY extends Currency
-  case object KRW extends Currency
-  case object MXN extends Currency
-  case object MYR extends Currency
-  case object NOK extends Currency
-  case object PLN extends Currency
-  case object SAR extends Currency
-  case object SEK extends Currency
-  case object SGD extends Currency
-  case object THB extends Currency
-  case object TRY extends Currency
-  case object TWD extends Currency
-  case object USD extends Currency
-  case object ZAR extends Currency
+  private final class CurrencyValue(code: String) extends Currency(code)
 
-  val values: List[Currency] =
+  private val supportedCodes: List[String] =
     List(
-      AED,
-      AUD,
-      BRL,
-      CAD,
-      CHF,
-      CNY,
-      CZK,
-      DKK,
-      EUR,
-      GBP,
-      HKD,
-      HUF,
-      IDR,
-      ILS,
-      INR,
-      JPY,
-      KRW,
-      MXN,
-      MYR,
-      NOK,
-      NZD,
-      PLN,
-      SAR,
-      SEK,
-      SGD,
-      THB,
-      TRY,
-      TWD,
-      USD,
-      ZAR
+      "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT", "BGN",
+      "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHF",
+      "CLP", "CNY", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN",
+      "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GGP", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD",
+      "HNL", "HRK", "HTG", "HUF", "IDR", "ILS", "IMP", "INR", "IQD", "IRR", "ISK", "JEP", "JMD", "JOD",
+      "JPY", "KES", "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD",
+      "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN",
+      "MYR", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR",
+      "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP",
+      "SLL", "SOS", "SPL", "SRD", "STN", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP", "TRY",
+      "TTD", "TVD", "TWD", "TZS", "UAH", "UGX", "USD", "UYU", "UZS", "VEF", "VND", "VUV", "WST", "XAF",
+      "XCD", "XDR", "XOF", "XPF", "YER", "ZAR", "ZMW", "ZWD"
     )
 
-  // Additional upstream currencies can be enabled later if needed.
-  // Expanding the supported set increases request size on cache refresh and can
-  // compromise the documented 10K/day capacity target.
-  // Example excluded currencies from the wider upstream universe:
-  // AFN, ALL, AMD, ANG, AOA, ARS, AWG, AZN, BAM, BBD, BDT, BGN, BHD, BIF,
-  // BMD, BND, BOB, BSD, BTN, BWP, BYN, BZD, CDF, CLP, COP, CRC, CUC, CUP,
-  // CVE, DJF, DOP, DZD, EGP, ERN, ETB, FJD, FKP, GEL, GGP, GHS, GIP, GMD,
-  // GNF, GTQ, GYD, HNL, HRK, HTG, IMP, IQD, IRR, ISK, JEP, JMD, JOD, KES,
-  // KGS, KHR, KMF, KPW, KWD, KYD, KZT, LAK, LBP, LKR, LRD, LSL, LYD, MAD,
-  // MDL, MGA, MKD, MMK, MNT, MOP, MRU, MUR, MVR, MWK, MZN, NAD, NGN, NIO,
-  // NPR, OMR, PAB, PEN, PGK, PHP, PKR, PYG, QAR, RON, RSD, RUB, RWF, SBD,
-  // SCR, SDG, SHP, SLL, SOS, SPL, SRD, STN, SVC, SYP, SZL, TJS, TMT, TND,
-  // TOP, TTD, TVD, TZS, UAH, UGX, UYU, UZS, VEF, VND, VUV, WST, XAF, XCD,
-  // XDR, XOF, XPF, YER, ZMW, ZWD
+  val values: List[Currency] = supportedCodes.map(new CurrencyValue(_))
 
-  implicit val show: Show[Currency] = Show.show {
-    case AED => "AED"
-    case AUD => "AUD"
-    case BRL => "BRL"
-    case CAD => "CAD"
-    case CHF => "CHF"
-    case CNY => "CNY"
-    case CZK => "CZK"
-    case DKK => "DKK"
-    case EUR => "EUR"
-    case GBP => "GBP"
-    case HKD => "HKD"
-    case HUF => "HUF"
-    case IDR => "IDR"
-    case ILS => "ILS"
-    case INR => "INR"
-    case JPY => "JPY"
-    case KRW => "KRW"
-    case MXN => "MXN"
-    case MYR => "MYR"
-    case NOK => "NOK"
-    case NZD => "NZD"
-    case PLN => "PLN"
-    case SAR => "SAR"
-    case SEK => "SEK"
-    case SGD => "SGD"
-    case THB => "THB"
-    case TRY => "TRY"
-    case TWD => "TWD"
-    case USD => "USD"
-    case ZAR => "ZAR"
-  }
+  private val codeToCurrency: Map[String, Currency] =
+    values.map(currency => currency.code -> currency).toMap
 
-  def fromString(s: String): Currency = s.toUpperCase match {
-    case "AED" => AED
-    case "AUD" => AUD
-    case "BRL" => BRL
-    case "CAD" => CAD
-    case "CHF" => CHF
-    case "CNY" => CNY
-    case "CZK" => CZK
-    case "DKK" => DKK
-    case "EUR" => EUR
-    case "GBP" => GBP
-    case "HKD" => HKD
-    case "HUF" => HUF
-    case "IDR" => IDR
-    case "ILS" => ILS
-    case "INR" => INR
-    case "JPY" => JPY
-    case "KRW" => KRW
-    case "MXN" => MXN
-    case "MYR" => MYR
-    case "NOK" => NOK
-    case "NZD" => NZD
-    case "PLN" => PLN
-    case "SAR" => SAR
-    case "SEK" => SEK
-    case "SGD" => SGD
-    case "THB" => THB
-    case "TRY" => TRY
-    case "TWD" => TWD
-    case "USD" => USD
-    case "ZAR" => ZAR
-  }
+  val AED: Currency = codeToCurrency("AED")
+  val AFN: Currency = codeToCurrency("AFN")
+  val ALL: Currency = codeToCurrency("ALL")
+  val AMD: Currency = codeToCurrency("AMD")
+  val ANG: Currency = codeToCurrency("ANG")
+  val AOA: Currency = codeToCurrency("AOA")
+  val ARS: Currency = codeToCurrency("ARS")
+  val AUD: Currency = codeToCurrency("AUD")
+  val AWG: Currency = codeToCurrency("AWG")
+  val AZN: Currency = codeToCurrency("AZN")
+  val BAM: Currency = codeToCurrency("BAM")
+  val BBD: Currency = codeToCurrency("BBD")
+  val BDT: Currency = codeToCurrency("BDT")
+  val BGN: Currency = codeToCurrency("BGN")
+  val BHD: Currency = codeToCurrency("BHD")
+  val BIF: Currency = codeToCurrency("BIF")
+  val BMD: Currency = codeToCurrency("BMD")
+  val BND: Currency = codeToCurrency("BND")
+  val BOB: Currency = codeToCurrency("BOB")
+  val BRL: Currency = codeToCurrency("BRL")
+  val BSD: Currency = codeToCurrency("BSD")
+  val BTN: Currency = codeToCurrency("BTN")
+  val BWP: Currency = codeToCurrency("BWP")
+  val BYN: Currency = codeToCurrency("BYN")
+  val BZD: Currency = codeToCurrency("BZD")
+  val CAD: Currency = codeToCurrency("CAD")
+  val CDF: Currency = codeToCurrency("CDF")
+  val CHF: Currency = codeToCurrency("CHF")
+  val CLP: Currency = codeToCurrency("CLP")
+  val CNY: Currency = codeToCurrency("CNY")
+  val COP: Currency = codeToCurrency("COP")
+  val CRC: Currency = codeToCurrency("CRC")
+  val CUC: Currency = codeToCurrency("CUC")
+  val CUP: Currency = codeToCurrency("CUP")
+  val CVE: Currency = codeToCurrency("CVE")
+  val CZK: Currency = codeToCurrency("CZK")
+  val DJF: Currency = codeToCurrency("DJF")
+  val DKK: Currency = codeToCurrency("DKK")
+  val DOP: Currency = codeToCurrency("DOP")
+  val DZD: Currency = codeToCurrency("DZD")
+  val EGP: Currency = codeToCurrency("EGP")
+  val ERN: Currency = codeToCurrency("ERN")
+  val ETB: Currency = codeToCurrency("ETB")
+  val EUR: Currency = codeToCurrency("EUR")
+  val FJD: Currency = codeToCurrency("FJD")
+  val FKP: Currency = codeToCurrency("FKP")
+  val GBP: Currency = codeToCurrency("GBP")
+  val GEL: Currency = codeToCurrency("GEL")
+  val GGP: Currency = codeToCurrency("GGP")
+  val GHS: Currency = codeToCurrency("GHS")
+  val GIP: Currency = codeToCurrency("GIP")
+  val GMD: Currency = codeToCurrency("GMD")
+  val GNF: Currency = codeToCurrency("GNF")
+  val GTQ: Currency = codeToCurrency("GTQ")
+  val GYD: Currency = codeToCurrency("GYD")
+  val HKD: Currency = codeToCurrency("HKD")
+  val HNL: Currency = codeToCurrency("HNL")
+  val HRK: Currency = codeToCurrency("HRK")
+  val HTG: Currency = codeToCurrency("HTG")
+  val HUF: Currency = codeToCurrency("HUF")
+  val IDR: Currency = codeToCurrency("IDR")
+  val ILS: Currency = codeToCurrency("ILS")
+  val IMP: Currency = codeToCurrency("IMP")
+  val INR: Currency = codeToCurrency("INR")
+  val IQD: Currency = codeToCurrency("IQD")
+  val IRR: Currency = codeToCurrency("IRR")
+  val ISK: Currency = codeToCurrency("ISK")
+  val JEP: Currency = codeToCurrency("JEP")
+  val JMD: Currency = codeToCurrency("JMD")
+  val JOD: Currency = codeToCurrency("JOD")
+  val JPY: Currency = codeToCurrency("JPY")
+  val KES: Currency = codeToCurrency("KES")
+  val KGS: Currency = codeToCurrency("KGS")
+  val KHR: Currency = codeToCurrency("KHR")
+  val KMF: Currency = codeToCurrency("KMF")
+  val KPW: Currency = codeToCurrency("KPW")
+  val KRW: Currency = codeToCurrency("KRW")
+  val KWD: Currency = codeToCurrency("KWD")
+  val KYD: Currency = codeToCurrency("KYD")
+  val KZT: Currency = codeToCurrency("KZT")
+  val LAK: Currency = codeToCurrency("LAK")
+  val LBP: Currency = codeToCurrency("LBP")
+  val LKR: Currency = codeToCurrency("LKR")
+  val LRD: Currency = codeToCurrency("LRD")
+  val LSL: Currency = codeToCurrency("LSL")
+  val LYD: Currency = codeToCurrency("LYD")
+  val MAD: Currency = codeToCurrency("MAD")
+  val MDL: Currency = codeToCurrency("MDL")
+  val MGA: Currency = codeToCurrency("MGA")
+  val MKD: Currency = codeToCurrency("MKD")
+  val MMK: Currency = codeToCurrency("MMK")
+  val MNT: Currency = codeToCurrency("MNT")
+  val MOP: Currency = codeToCurrency("MOP")
+  val MRU: Currency = codeToCurrency("MRU")
+  val MUR: Currency = codeToCurrency("MUR")
+  val MVR: Currency = codeToCurrency("MVR")
+  val MWK: Currency = codeToCurrency("MWK")
+  val MXN: Currency = codeToCurrency("MXN")
+  val MYR: Currency = codeToCurrency("MYR")
+  val MZN: Currency = codeToCurrency("MZN")
+  val NAD: Currency = codeToCurrency("NAD")
+  val NGN: Currency = codeToCurrency("NGN")
+  val NIO: Currency = codeToCurrency("NIO")
+  val NOK: Currency = codeToCurrency("NOK")
+  val NPR: Currency = codeToCurrency("NPR")
+  val NZD: Currency = codeToCurrency("NZD")
+  val OMR: Currency = codeToCurrency("OMR")
+  val PAB: Currency = codeToCurrency("PAB")
+  val PEN: Currency = codeToCurrency("PEN")
+  val PGK: Currency = codeToCurrency("PGK")
+  val PHP: Currency = codeToCurrency("PHP")
+  val PKR: Currency = codeToCurrency("PKR")
+  val PLN: Currency = codeToCurrency("PLN")
+  val PYG: Currency = codeToCurrency("PYG")
+  val QAR: Currency = codeToCurrency("QAR")
+  val RON: Currency = codeToCurrency("RON")
+  val RSD: Currency = codeToCurrency("RSD")
+  val RUB: Currency = codeToCurrency("RUB")
+  val RWF: Currency = codeToCurrency("RWF")
+  val SAR: Currency = codeToCurrency("SAR")
+  val SBD: Currency = codeToCurrency("SBD")
+  val SCR: Currency = codeToCurrency("SCR")
+  val SDG: Currency = codeToCurrency("SDG")
+  val SEK: Currency = codeToCurrency("SEK")
+  val SGD: Currency = codeToCurrency("SGD")
+  val SHP: Currency = codeToCurrency("SHP")
+  val SLL: Currency = codeToCurrency("SLL")
+  val SOS: Currency = codeToCurrency("SOS")
+  val SPL: Currency = codeToCurrency("SPL")
+  val SRD: Currency = codeToCurrency("SRD")
+  val STN: Currency = codeToCurrency("STN")
+  val SVC: Currency = codeToCurrency("SVC")
+  val SYP: Currency = codeToCurrency("SYP")
+  val SZL: Currency = codeToCurrency("SZL")
+  val THB: Currency = codeToCurrency("THB")
+  val TJS: Currency = codeToCurrency("TJS")
+  val TMT: Currency = codeToCurrency("TMT")
+  val TND: Currency = codeToCurrency("TND")
+  val TOP: Currency = codeToCurrency("TOP")
+  val TRY: Currency = codeToCurrency("TRY")
+  val TTD: Currency = codeToCurrency("TTD")
+  val TVD: Currency = codeToCurrency("TVD")
+  val TWD: Currency = codeToCurrency("TWD")
+  val TZS: Currency = codeToCurrency("TZS")
+  val UAH: Currency = codeToCurrency("UAH")
+  val UGX: Currency = codeToCurrency("UGX")
+  val USD: Currency = codeToCurrency("USD")
+  val UYU: Currency = codeToCurrency("UYU")
+  val UZS: Currency = codeToCurrency("UZS")
+  val VEF: Currency = codeToCurrency("VEF")
+  val VND: Currency = codeToCurrency("VND")
+  val VUV: Currency = codeToCurrency("VUV")
+  val WST: Currency = codeToCurrency("WST")
+  val XAF: Currency = codeToCurrency("XAF")
+  val XCD: Currency = codeToCurrency("XCD")
+  val XDR: Currency = codeToCurrency("XDR")
+  val XOF: Currency = codeToCurrency("XOF")
+  val XPF: Currency = codeToCurrency("XPF")
+  val YER: Currency = codeToCurrency("YER")
+  val ZAR: Currency = codeToCurrency("ZAR")
+  val ZMW: Currency = codeToCurrency("ZMW")
+  val ZWD: Currency = codeToCurrency("ZWD")
+
+  implicit val show: Show[Currency] =
+    Show.show(_.code)
+
+  def fromString(s: String): Currency =
+    parse(s).get
 
   def parse(s: String): Option[Currency] =
-    values.find(show.show(_) == s.toUpperCase)
-
+    codeToCurrency.get(s.toUpperCase)
 }

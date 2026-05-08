@@ -13,7 +13,7 @@ Assignment:
 | Upstream API | One-Frame `GET /rates?pair=...` |
 | Cache | Redis |
 | Freshness | `5 minutes` |
-| Supported currencies | selected top `30` |
+| Supported currencies | configured full set `162` |
 | Same currency | return `1` locally without upstream call |
 
 ## Quickstart
@@ -53,10 +53,10 @@ sbt test
 | Item | Why | Proof |
 | --- | --- | --- |
 | Redis cache | shared cache is closer to production than per-process memory and survives app restarts | [API and I/O](./documentation/api-interface/api-io.md#cache) |
-| Supported currencies = `30` | code can be expanded to more currencies, but `30` was chosen to keep the documented `10K/day` target realistic under upstream quota and measured request-size limits | [Investigation - Maximum Supported Currencies For `10K/day`](./documentation/investigation/investigation.md#maximum-supported-currencies-for-10kday) |
+| Supported currencies = `162` | implementation supports the wider configured currency set instead of a capped `30`-currency scope | [Investigation - Assumptions](./documentation/investigation/investigation.md#assumptions) |
 | Cache refresh policy | on miss or stale data, fetch the requested source currency with every other supported target currency once and reuse those cached rates for later requests with the same source currency | [API and I/O](./documentation/api-interface/api-io.md#request-steps) |
-| Scope tradeoff | increasing supported currencies increases upstream URL size; measured safe upstream batch was `322` pairs and measured failing batch was `483` pairs, so broader scope can compromise the `10K/day` target | [Investigation - Request Size Finding](./documentation/investigation/investigation.md#request-size-finding) |
-| `10K/day` target | cache refresh strategy is sized to fit under the upstream `1000/day` limit | [Investigation - Proof Of Capacity](./documentation/investigation/investigation.md#proof-of-capacity) |
+| Scope tradeoff | broader currency support increases upstream URL size; measured safe upstream batch was `322` pairs and measured failing batch was `483` pairs, so wider scope weakens the earlier `10K/day` proof | [Investigation - Request Size Finding](./documentation/investigation/investigation.md#request-size-finding) |
+| `10K/day` target | with the full `162`-currency scope, `10K/day` is no longer guaranteed by this implementation and depends on favorable request reuse | [Investigation - Honest Limit](./documentation/investigation/investigation.md#honest-limit) |
 
 ## Design Links
 
