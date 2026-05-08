@@ -17,8 +17,6 @@ import org.http4s.server.middleware.{ AutoSlash, Timeout }
 
 class Module[F[_]: Concurrent: Timer](config: ApplicationConfig) extends Http4sDsl[F] {
 
-  private val F = Sync[F]
-
   private val activeRequests = new AtomicInteger(0)
 
   private val ratesService: RatesService[F] = RatesServices.live[F](config.oneFrame, config.cache, config.redis)
@@ -38,13 +36,32 @@ class Module[F[_]: Concurrent: Timer](config: ApplicationConfig) extends Http4sD
 
   private val appMiddleware: TotalMiddleware = { http: HttpApp[F] =>
     val timeoutApp = Timeout(config.http.timeout)(http)
+    Module.withConcurrencyLimit(timeoutApp, config.security.maxConcurrentRequests, activeRequests)
+  }
+
+  private val http: HttpRoutes[F] = ratesHttpRoutes
+
+  val httpApp: HttpApp[F] = appMiddleware(routesMiddleware(http).orNotFound)
+
+}
+
+object Module {
+  def withConcurrencyLimit[F[_]: Concurrent](
+      http: HttpApp[F],
+      maxConcurrentRequests: Int,
+      activeRequests: AtomicInteger = new AtomicInteger(0)
+  ): HttpApp[F] = {
+    val F = Sync[F]
+    object dsl extends Http4sDsl[F]
+    import dsl._
+
     HttpApp[F] { request =>
-      Sync[F].delay(activeRequests.incrementAndGet()).flatMap { current =>
-        if (current > config.security.maxConcurrentRequests) {
+      F.delay(activeRequests.incrementAndGet()).flatMap { current =>
+        if (current > maxConcurrentRequests) {
           F.delay(activeRequests.decrementAndGet()) *>
             TooManyRequests(ErrorApiResponse(ErrorCode.TooManyRequests, "Too many requests"))
         } else {
-          Concurrent[F].attempt(timeoutApp.run(request)).flatMap { result =>
+          Concurrent[F].attempt(http.run(request)).flatMap { result =>
             F.delay(activeRequests.decrementAndGet()) *>
               result.fold(F.raiseError, F.pure)
           }
@@ -52,9 +69,4 @@ class Module[F[_]: Concurrent: Timer](config: ApplicationConfig) extends Http4sD
       }
     }
   }
-
-  private val http: HttpRoutes[F] = ratesHttpRoutes
-
-  val httpApp: HttpApp[F] = appMiddleware(routesMiddleware(http).orNotFound)
-
 }

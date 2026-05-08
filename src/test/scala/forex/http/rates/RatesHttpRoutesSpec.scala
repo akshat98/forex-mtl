@@ -1,17 +1,16 @@
 package forex.http.rates
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
-import cats.effect.IO
+import cats.effect.{ Concurrent, IO }
+import cats.effect.concurrent.Deferred
 import cats.syntax.either._
 import forex.Module
-import forex.config.{ ApplicationConfig, CacheConfig, HttpConfig, OneFrameConfig, RedisConfig, SecurityConfig }
 import forex.domain.{ Currency, Price, Rate, Timestamp }
 import forex.programs.RatesProgram
 import forex.programs.rates.Protocol.GetRatesRequest
 import forex.programs.rates.errors.Error
 import io.circe.parser.parse
-import org.http4s.Request
+import org.http4s.{ Request, Response, Status }
 import org.http4s.implicits._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -110,19 +109,25 @@ class RatesHttpRoutesSpec extends AnyFlatSpec with Matchers {
       Some("FX_503_UPSTREAM_QUOTA")
   }
 
-  it should "return 429 when concurrent request limit is exceeded" in {
+  it should "return 429 on the third concurrent request when the limit is 2" in {
     implicit val cs = IO.contextShift(ExecutionContext.global)
-    implicit val timer = IO.timer(ExecutionContext.global)
 
-    val config = ApplicationConfig(
-      http = HttpConfig("0.0.0.0", 8080, 5.seconds),
-      oneFrame = OneFrameConfig("http://localhost:8080", "test-token", 1.second),
-      cache = CacheConfig(5.minutes),
-      redis = RedisConfig("localhost", 6379, "redis-local-token", 1.second),
-      security = SecurityConfig(0)
-    )
-
-    val response = new Module[IO](config).httpApp.run(Request[IO](uri = uri"/rates?from=USD&to=JPY")).unsafeRunSync()
+    val request = Request[IO](uri = uri"/rates?from=USD&to=JPY")
+    val response = (
+      for {
+        gate <- Deferred[IO, Unit]
+        slowApp = Module.withConcurrencyLimit(
+          org.http4s.HttpApp[IO](_ => gate.get.flatMap(_ => IO.pure(Response[IO](Status.Ok)))),
+          maxConcurrentRequests = 2
+        )
+        firstFiber <- Concurrent[IO].start(slowApp.run(request))
+        secondFiber <- Concurrent[IO].start(slowApp.run(request))
+        thirdResponse <- slowApp.run(request)
+        _ <- gate.complete(())
+        _ <- firstFiber.join
+        _ <- secondFiber.join
+      } yield thirdResponse
+    ).unsafeRunSync()
 
     response.status.code shouldBe 429
     parse(response.as[String].unsafeRunSync()).toOption.flatMap(_.hcursor.get[String]("code").toOption) shouldBe
